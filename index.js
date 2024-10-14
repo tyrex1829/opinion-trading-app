@@ -15,6 +15,7 @@ app.get("/", (req, res) => {
   console.log("Landing page");
 });
 
+// End-Points
 app.post("/user/create/:userId", (req, res) => {
   const userId = req.params.userId;
 
@@ -29,13 +30,33 @@ app.post("/user/create/:userId", (req, res) => {
     locked: 0,
   };
 
+  console.log(INR_BALANCES);
+
   return res.status(200).json({
     message: `Successfully created a user of id: ${userId}`,
     INR_BALANCES,
   });
 });
 
-app.post("/user/create/:stockSymbol", (req, res) => {});
+app.post("/user/create/:stockSymbol", (req, res) => {
+  const stockSymbol = req.params.stockSymbol;
+
+  if (ORDERBOOK[stockSymbol]) {
+    return res.status(403).json({
+      message: `Symbol ${stockSymbol} already exists`,
+    });
+  }
+
+  ORDERBOOK[stockSymbol] = {
+    yes: {},
+    no: {},
+  };
+
+  res.status(200).json({
+    message: `Successfully created ${stockSymbol} symbol`,
+    ORDERBOOK,
+  });
+});
 
 app.get("/orderbook", (req, res) => {
   return res.status(200).json({
@@ -52,6 +73,23 @@ app.get("/balance/inr", (req, res) => {
 app.get("/balances/stock", (req, res) => {
   return res.status(200).json({
     STOCK_BALANCES,
+  });
+});
+
+// Functionality
+app.get("/balance/inr/:userId", (req, res) => {
+  const userId = req.params.userId;
+
+  if (!INR_BALANCES[userId]) {
+    return res.status(404).json({
+      message: `${userId} not found`,
+    });
+  }
+
+  const balanceOfReqUser = INR_BALANCES[userId].balance;
+
+  res.json({
+    balance: balanceOfReqUser,
   });
 });
 
