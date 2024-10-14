@@ -93,6 +93,39 @@ app.get("/balance/inr/:userId", (req, res) => {
   });
 });
 
+app.post("/onramp/inr", (req, res) => {
+  const { userId, amount } = req.body;
+
+  if (!INR_BALANCES[userId]) {
+    return res.status(404).json({
+      message: `${userId} not found`,
+    });
+  }
+
+  //   check if correct typeof amount sent
+  INR_BALANCES[userId].balance += amount;
+
+  res.json({
+    INR_BALANCES,
+  });
+});
+
+app.get("/balance/stock/:userId", (req, res) => {
+  const userId = req.params.userId;
+
+  if (!STOCK_BALANCES[userId]) {
+    return res.status(404).json({
+      message: `${userId} not found`,
+    });
+  }
+
+  const balanceStockOfUser = STOCK_BALANCES[userId].BTC_USDT_10_Oct_2024_9_30;
+
+  return res.status(200).json({
+    balanceStockOfUser,
+  });
+});
+
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
