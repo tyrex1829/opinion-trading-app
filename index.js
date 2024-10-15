@@ -126,6 +126,83 @@ app.get("/balance/stock/:userId", (req, res) => {
   });
 });
 
+app.post("/order/buy", (req, res) => {
+  const { userId, stockSymbol, quantity, price, stockType } = req.body;
+
+  if (!userId || !stockSymbol || !quantity || !price) {
+    return res.status(404).json({
+      message: `Missing required field`,
+    });
+  }
+
+  if (!ORDERBOOK[stockSymbol]) {
+    return res.status(404).json({
+      message: `Stock not available in orderbook`,
+    });
+  }
+
+  if (!ORDERBOOK[stockSymbol].stockType[price]) {
+    ORDERBOOK[stockSymbol].stockType[price] = {
+      total: 0,
+      orders: {},
+    };
+  }
+
+  const levelOfPrice = ORDERBOOK[stockSymbol].stockType[price];
+
+  if (levelOfPrice.orders[userId]) {
+    levelOfPrice.orders[userId] += quantity;
+  } else {
+    levelOfPrice.orders[userId] = quantity;
+  }
+
+  levelOfPrice.total += quantity;
+
+  return res.status(200).json({
+    message: `Successfully placed buy order for ${quantity} of ${stockType} at price ${price} for ${stockSymbol}`,
+    updatedOrderBook: ORDERBOOK[stockSymbol].stockType,
+  });
+});
+
+app.post("/order/sell", (req, res) => {
+  const { userId, stockSymbol, quantity, price, stockType } = req.body;
+
+  if (!userId || !stockSymbol || !quantity || !price) {
+    return res.status(404).json({
+      message: `Missing required field`,
+    });
+  }
+
+  if (!ORDERBOOK[stockSymbol]) {
+    return res.status(404).json({
+      message: `Stock not available in orderbook`,
+    });
+  }
+
+  if (!ORDERBOOK[stockSymbol].stockType[price]) {
+    return res.status(404).json({
+      message: `No ${stockType} orders found at price ${price} for stock ${stockSymbol}`,
+    });
+  }
+
+  const levelOfPrice = ORDERBOOK[stockSymbol].stockType[price];
+
+  if (!levelOfPrice.orders[userId] || levelOfPrice.orders[userId]) {
+  }
+});
+
+app.post("/order/buy", (req, res) => {});
+
+app.post("/order/sell", (req, res) => {});
+
+app.get("/orderbook/:stockSymbol", (req, res) => {
+  const stockSymbol = req.params.stockSymbol;
+});
+
+app.post("/trade/mint", (req, res) => {});
+
+app.post;
+
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
