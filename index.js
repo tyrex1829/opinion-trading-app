@@ -129,7 +129,13 @@ app.get("/balance/stock/:userId", (req, res) => {
 app.post("/order/buy", (req, res) => {
   const { userId, stockSymbol, quantity, price, stockType } = req.body;
 
-  if (!userId || !stockSymbol || !quantity || !price || stockType !== "yes") {
+  if (
+    !userId ||
+    !stockSymbol ||
+    !quantity ||
+    !price ||
+    (stockType !== "yes" && stockType !== "no")
+  ) {
     return res.status(404).json({
       message: `Missing required field`,
     });
