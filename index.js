@@ -133,6 +133,7 @@ app.post("/order/buy", (req, res) => {
     !userId ||
     !stockSymbol ||
     !quantity ||
+    quantity <= 0 ||
     !price ||
     (stockType !== "yes" && stockType !== "no")
   ) {
@@ -206,37 +207,132 @@ app.post("/order/buy", (req, res) => {
 app.post("/order/sell", (req, res) => {
   const { userId, stockSymbol, quantity, price, stockType } = req.body;
 
-  if (!userId || !stockSymbol || !quantity || !price) {
+  if (
+    !userId ||
+    !stockSymbol ||
+    !quantity ||
+    quantity <= 0 ||
+    !price ||
+    (stockType !== "yes" && stockType !== "no")
+  ) {
     return res.status(404).json({
       message: `Missing required field`,
     });
   }
 
+  if (!STOCK_BALANCES[userId]) {
+    return res.status(404).json({
+      message: `${userId} is not registered, pls register this user first.`,
+    });
+  }
+
+  if (!STOCK_BALANCES[userId][stockSymbol]) {
+    return res.status(404).json({
+      message: `${userId} does not own this stock-symbol, pls buy this stock-symbol first.`,
+    });
+  }
+
+  if (!STOCK_BALANCES[userId][stockSymbol][stockType]) {
+    return res.status(404).json({
+      message: `${userId} does not own this stock-type, pls buy this stock-type first.`,
+    });
+  }
+
+  if (!STOCK_BALANCES[userId][stockSymbol][stockType].quantity < quantity) {
+    return res.status(404).json({
+      message: `${userId} does not own appropriate quantity of ${stockType} token of ${stockSymbol} to sell, pls sell accordingly.`,
+    });
+  }
+
+  STOCK_BALANCES[userId][stockSymbol][stockType].quantity -= quantity;
+  STOCK_BALANCES[userId][stockSymbol][stockType].locked += quantity;
+
   if (!ORDERBOOK[stockSymbol]) {
-    return res.status(404).json({
-      message: `Stock not available in orderbook`,
-    });
+    ORDERBOOK[stockSymbol] = {
+      yes: {},
+      no: {},
+    };
   }
 
-  if (!ORDERBOOK[stockSymbol].stockType[price]) {
-    return res.status(404).json({
-      message: `No ${stockType} orders found at price ${price} for stock ${stockSymbol}`,
-    });
+  if (!ORDERBOOK[stockSymbol][stockType][price]) {
+    ORDERBOOK[stockSymbol][stockType][price] = {
+      total: 0,
+      orders: {},
+    };
   }
 
-  const levelOfPrice = ORDERBOOK[stockSymbol].stockType[price];
+  const levelOfPrice = ORDERBOOK[stockSymbol][stockType][price];
 
-  if (!levelOfPrice.orders[userId] || levelOfPrice.orders[userId]) {
+  if (levelOfPrice.orders[userId]) {
+    levelOfPrice.orders[userId] += quantity;
+  } else {
+    levelOfPrice.orders[userId] = quantity;
   }
+
+  levelOfPrice.total += quantity;
+
+  return res.status(200).json({
+    message: `Successfully placed sell order for ${quantity} of ${stockType} at price ${price} for ${stockSymbol}`,
+    updatedOrderBook: ORDERBOOK[stockSymbol][stockType],
+    updatedStockBalance: STOCK_BALANCES[userId][stockSymbol][stockType],
+  });
 });
 
 app.get("/orderbook/:stockSymbol", (req, res) => {
   const stockSymbol = req.params.stockSymbol;
+
+  if (!ORDERBOOK[stockSymbol]) {
+    return res.status(404).json({
+      message: `${stockSymbol} named stock is not found, pls provide appropriate stock-symbol`,
+    });
+  }
+
+  return res.status(200).json({
+    OrderBook: ORDERBOOK[stockSymbol],
+  });
 });
 
-app.post("/trade/mint", (req, res) => {});
+app.post("/trade/mint", (req, res) => {
+  const { userId, stockSymbol, quantity, stockType } = req.body;
 
-app.post;
+  if (
+    !userId ||
+    !stockSymbol ||
+    !quantity ||
+    quantity <= 0 ||
+    (stockType !== "yes" && stockType !== "no")
+  ) {
+    return res.status(404).json({
+      message: `Please provide appropriate details.`,
+    });
+  }
+
+  if (!STOCK_BALANCES[userId]) {
+    return res.status(404).json({
+      message: `${userId} not registered, pls register first.`,
+    });
+  }
+
+  if (!STOCK_BALANCES[userId][stockSymbol]) {
+    STOCK_BALANCES[userId][stockSymbol] = {
+      yes: {
+        quantity: 0,
+        locked: 0,
+      },
+      no: {
+        quantity: 0,
+        locked: 0,
+      },
+    };
+  }
+
+  STOCK_BALANCES[userId][stockSymbol][stockType].quantity += quantity;
+
+  return res.status(200).json({
+    message: `Successfully minted ${quantity} of tokens for ${stockSymbol} to ${userId}`,
+    updatedStockBalance: STOCK_BALANCES[userId][stockSymbol][stockType],
+  });
+});
 
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
