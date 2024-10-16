@@ -76,6 +76,19 @@ app.get("/balances/stock", (req, res) => {
   });
 });
 
+app.post("/reset", (req, res) => {
+  INR_BALANCES = {};
+  ORDERBOOK = {};
+  STOCK_BALANCES = {};
+
+  return res.status(200).json({
+    message: `Reset data`,
+    INR_BALANCES,
+    ORDERBOOK,
+    STOCK_BALANCES,
+  });
+});
+
 // Functionality
 app.get("/balance/inr/:userId", (req, res) => {
   const userId = req.params.userId;
