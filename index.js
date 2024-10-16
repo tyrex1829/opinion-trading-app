@@ -129,26 +129,41 @@ app.get("/balance/stock/:userId", (req, res) => {
 app.post("/order/buy", (req, res) => {
   const { userId, stockSymbol, quantity, price, stockType } = req.body;
 
-  if (!userId || !stockSymbol || !quantity || !price) {
+  if (!userId || !stockSymbol || !quantity || !price || stockType !== "yes") {
     return res.status(404).json({
       message: `Missing required field`,
     });
   }
 
-  if (!ORDERBOOK[stockSymbol]) {
+  if (!INR_BALANCES[userId]) {
     return res.status(404).json({
-      message: `Stock not available in orderbook`,
+      message: `${userId} is not available, pls create the particular user first.`,
     });
   }
 
-  if (!ORDERBOOK[stockSymbol].stockType[price]) {
-    ORDERBOOK[stockSymbol].stockType[price] = {
+  const totalPrice = price * quantity;
+
+  if (INR_BALANCES[userId].balance < totalPrice) {
+    return res.status(404).json({
+      message: `You don't have sufficient balance to place this order, kindly add the required amount first.`,
+    });
+  }
+
+  if (!ORDERBOOK[stockSymbol]) {
+    ORDERBOOK[stockSymbol] = {
+      yes: {},
+      no: {},
+    };
+  }
+
+  if (!ORDERBOOK[stockSymbol][stockType][price]) {
+    ORDERBOOK[stockSymbol][stockType][price] = {
       total: 0,
       orders: {},
     };
   }
 
-  const levelOfPrice = ORDERBOOK[stockSymbol].stockType[price];
+  const levelOfPrice = ORDERBOOK[stockSymbol][stockType][price];
 
   if (levelOfPrice.orders[userId]) {
     levelOfPrice.orders[userId] += quantity;
@@ -158,9 +173,27 @@ app.post("/order/buy", (req, res) => {
 
   levelOfPrice.total += quantity;
 
+  INR_BALANCES[userId].balance -= totalPrice;
+  INR_BALANCES[userId].locked += totalPrice;
+
+  if (!STOCK_BALANCES[userId]) {
+    STOCK_BALANCES[userId] = {};
+  }
+
+  if (!STOCK_BALANCES[userId][stockSymbol]) {
+    STOCK_BALANCES[userId][stockSymbol] = {
+      yes: { quantity: 0, locked: 0 },
+      no: { quantity: 0, locked: 0 },
+    };
+  }
+
+  STOCK_BALANCES[userId][stockSymbol][stockType].quantity += quantity;
+
   return res.status(200).json({
     message: `Successfully placed buy order for ${quantity} of ${stockType} at price ${price} for ${stockSymbol}`,
-    updatedOrderBook: ORDERBOOK[stockSymbol].stockType,
+    updatedOrderBook: ORDERBOOK[stockSymbol][stockType],
+    userBalance: INR_BALANCES[userId],
+    updatedStockBalance: STOCK_BALANCES[userId][stockSymbol],
   });
 });
 
@@ -190,10 +223,6 @@ app.post("/order/sell", (req, res) => {
   if (!levelOfPrice.orders[userId] || levelOfPrice.orders[userId]) {
   }
 });
-
-app.post("/order/buy", (req, res) => {});
-
-app.post("/order/sell", (req, res) => {});
 
 app.get("/orderbook/:stockSymbol", (req, res) => {
   const stockSymbol = req.params.stockSymbol;
