@@ -232,6 +232,13 @@ app.post("/order/buy", (req, res) => {
     };
   }
 
+  if (!STOCK_BALANCES[userId][stockSymbol][stockType]) {
+    STOCK_BALANCES[userId][stockSymbol][stockType] = {
+      quantity: 0,
+      locked: 0,
+    };
+  }
+
   STOCK_BALANCES[userId][stockSymbol][stockType].quantity += quantity;
 
   return res.status(200).json({
@@ -276,7 +283,7 @@ app.post("/order/sell", (req, res) => {
     });
   }
 
-  if (!STOCK_BALANCES[userId][stockSymbol][stockType].quantity < quantity) {
+  if (STOCK_BALANCES[userId][stockSymbol][stockType].quantity < quantity) {
     return res.status(404).json({
       message: `${userId} does not own appropriate quantity of ${stockType} token of ${stockSymbol} to sell, pls sell accordingly.`,
     });
