@@ -318,6 +318,7 @@ app.post("/order/sell", (req, res) => {
 
   return res.status(200).json({
     message: `Successfully placed sell order for ${quantity} of ${stockType} at price ${price} for ${stockSymbol}`,
+    userBalance: INR_BALANCES[userId],
     updatedOrderBook: ORDERBOOK[stockSymbol][stockType],
     updatedStockBalance: STOCK_BALANCES[userId][stockSymbol][stockType],
   });
