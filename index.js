@@ -23,6 +23,9 @@ app.post("/user/create/:userId", (req, res) => {
   const userId = req.params.userId;
 
   if (INR_BALANCES[userId]) {
+    if (!STOCK_BALANCES[userId]) {
+      STOCK_BALANCES[userId] = {};
+    }
     return res.status(403).json({
       message: "User Already exists",
     });
@@ -33,10 +36,10 @@ app.post("/user/create/:userId", (req, res) => {
     locked: 0,
   };
 
-  console.log(INR_BALANCES);
+  STOCK_BALANCES[userId] = {};
 
   return res.status(200).json({
-    message: `Successfully created a user of id: ${userId}`,
+    message: `Successfully created a user of id: ${userId} in inr-balance as well as stock-balance variable`,
     INR_BALANCES,
   });
 });
@@ -86,7 +89,7 @@ app.get("/orderbook", (req, res) => {
   });
 });
 
-app.get("/balance/inr", (req, res) => {
+app.get("/balances/inr", (req, res) => {
   return res.status(200).json({
     INR_BALANCES,
   });
@@ -154,7 +157,7 @@ app.get("/balance/stock/:userId", (req, res) => {
     });
   }
 
-  const balanceStockOfUser = STOCK_BALANCES[userId].BTC_USDT_10_Oct_2024_9_30;
+  const balanceStockOfUser = STOCK_BALANCES[userId];
 
   return res.status(200).json({
     balanceStockOfUser,
