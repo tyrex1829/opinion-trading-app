@@ -13,6 +13,9 @@ app.use(express.json());
 
 app.get("/", (req, res) => {
   console.log("Landing page");
+  res.json({
+    message: `Landing Page`,
+  });
 });
 
 // End-Points
