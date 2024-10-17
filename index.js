@@ -41,23 +41,42 @@ app.post("/user/create/:userId", (req, res) => {
   });
 });
 
-app.post("/user/create/:stockSymbol", (req, res) => {
+app.post("/symbol/create/:stockSymbol", (req, res) => {
   const stockSymbol = req.params.stockSymbol;
+  const userId = req.body.userId;
 
-  if (ORDERBOOK[stockSymbol]) {
-    return res.status(403).json({
-      message: `Symbol ${stockSymbol} already exists`,
+  if (!userId) {
+    return res.status(404).json({
+      message: `Please provide userId.`,
     });
   }
 
-  ORDERBOOK[stockSymbol] = {
-    yes: {},
-    no: {},
+  if (!STOCK_BALANCES[userId]) {
+    return res.status(404).json({
+      message: `${userId} does not exist, pls register this user id.`,
+    });
+  }
+
+  if (STOCK_BALANCES[userId][stockSymbol]) {
+    return res.status(400).json({
+      message: `${userId} already has ${stockSymbol}.`,
+    });
+  }
+
+  STOCK_BALANCES[userId][stockSymbol] = {
+    yes: {
+      quantity: 0,
+      locked: 0,
+    },
+    no: {
+      quantity: 0,
+      locked: 0,
+    },
   };
 
   res.status(200).json({
-    message: `Successfully created ${stockSymbol} symbol`,
-    ORDERBOOK,
+    message: `Successfully created ${stockSymbol} symbol for ${userId}`,
+    updatedStockBalance: STOCK_BALANCES[userId],
   });
 });
 
