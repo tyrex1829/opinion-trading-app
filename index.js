@@ -102,12 +102,12 @@ app.get("/balances/stock", (req, res) => {
 });
 
 app.post("/reset", (req, res) => {
-  INR_BALANCES = {};
-  ORDERBOOK = {};
-  STOCK_BALANCES = {};
+  Object.keys(INR_BALANCES).forEach((key) => delete INR_BALANCES[key]);
+  Object.keys(ORDERBOOK).forEach((key) => delete ORDERBOOK[key]);
+  Object.keys(STOCK_BALANCES).forEach((key) => delete STOCK_BALANCES[key]);
 
   return res.status(200).json({
-    message: `Reset data`,
+    message: `Reset data successfully.`,
     INR_BALANCES,
     ORDERBOOK,
     STOCK_BALANCES,
