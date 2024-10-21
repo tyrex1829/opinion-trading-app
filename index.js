@@ -334,7 +334,7 @@ app.get("/orderbook/:stockSymbol", (req, res) => {
 
   if (!ORDERBOOK[stockSymbol]) {
     return res.status(404).json({
-      message: `${stockSymbol} named stock is not found, pls provide appropriate stock-symbol`,
+      message: `${stockSymbol} is not found on orderbook, pls provide appropriate stock-symbol`,
     });
   }
 
