@@ -134,13 +134,18 @@ app.get("/balance/inr/:userId", (req, res) => {
 app.post("/onramp/inr", (req, res) => {
   const { userId, amount } = req.body;
 
+  if (typeof amount !== number) {
+    return res.status(403).json({
+      message: `Amount can only be number.`,
+    });
+  }
+
   if (!INR_BALANCES[userId]) {
     return res.status(404).json({
       message: `${userId} not found`,
     });
   }
 
-  //   check if correct typeof amount sent
   INR_BALANCES[userId].balance += amount;
 
   res.json({
