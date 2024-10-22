@@ -1,4 +1,4 @@
-function fulfillOrder(
+export default function fulfillOrder(
   userId,
   stockSymbol,
   quantity,
@@ -6,66 +6,61 @@ function fulfillOrder(
   stockType,
   isBuyOrder
 ) {
-  let remainingQuantity = quantity; // How much quantity is still left to fulfill.
-
-  // Determine the opposite type for matching (buy -> match sell, sell -> match buy).
+  let remainingQuantity = quantity;
   const oppositeType = stockType === "yes" ? "no" : "yes";
 
-  // Get all price levels for the opposite orders (for matching).
-  const matchingOrders = Object.keys(ORDERBOOK[stockSymbol][oppositeType])
-    .map(Number) // Convert keys (prices) to numbers.
-    .sort(isBuyOrder ? (a, b) => a - b : (a, b) => b - a); // Sort based on buy/sell order type.
+  for (let existingPrice in ORDERBOOK[stockSymbol][oppositeType]) {
+    existingPrice = parseFloat(existingPrice);
 
-  // Loop through the matching price levels.
-  for (let matchingPrice of matchingOrders) {
-    if (isBuyOrder && matchingPrice > price) break; // For buy, stop if price is too high.
-    if (!isBuyOrder && matchingPrice < price) break; // For sell, stop if price is too low.
-    if (remainingQuantity <= 0) break; // If no more quantity to fulfill, stop.
+    if (
+      (isBuyOrder && existingPrice > price) ||
+      (!isBuyOrder && existingPrice < price)
+    ) {
+      continue;
+    }
 
-    const matchingLevel = ORDERBOOK[stockSymbol][oppositeType][matchingPrice]; // Get sell/buy orders at this price level.
+    const existingOrders = ORDERBOOK[stockSymbol][oppositeType][existingPrice];
 
-    // Determine how much of the order can be fulfilled at this price level.
-    const fulfillableQuantity = Math.min(
-      remainingQuantity,
-      matchingLevel.total
-    );
+    for (let existingUserId in existingOrders.orders) {
+      if (remainingQuantity <= 0) break;
 
-    remainingQuantity -= fulfillableQuantity; // Update the remaining quantity to fulfill.
-    matchingLevel.total -= fulfillableQuantity; // Reduce the available quantity at this price level.
+      if (existingUserId === userId) continue;
 
-    // Fulfill the orders for each opposite user at this price level.
-    for (let oppositeUserId in matchingLevel.orders) {
-      const matchedOrderQuantity = Math.min(
-        matchingLevel.orders[oppositeUserId],
-        fulfillableQuantity
-      );
+      const availableQuantity = existingOrders.orders[existingUserId];
+      const quantityToMatch = Math.min(availableQuantity, remainingQuantity);
+      const matchCost = quantityToMatch * existingPrice;
 
-      if (matchedOrderQuantity > 0) {
-        // Update the stock balances and INR balances for the opposite user.
-        STOCK_BALANCES[oppositeUserId][stockSymbol][oppositeType].quantity -=
-          matchedOrderQuantity;
-        INR_BALANCES[oppositeUserId].balance +=
-          matchedOrderQuantity * matchingPrice;
-        INR_BALANCES[oppositeUserId].locked -=
-          matchedOrderQuantity * matchingPrice;
+      // Update INR_BALANCES
+      INR_BALANCES[existingUserId].locked -= matchCost;
+      INR_BALANCES[existingUserId].balance += matchCost;
 
-        fulfillableQuantity -= matchedOrderQuantity; // Update how much more can be fulfilled.
-        matchingLevel.orders[oppositeUserId] -= matchedOrderQuantity; // Reduce this user's order quantity.
+      // Ensure STOCK_BALANCES are properly initialized
+      initializeStockBalances(userId, stockSymbol, stockType);
+      initializeStockBalances(existingUserId, stockSymbol, oppositeType);
 
-        // If this user's order is fully fulfilled, remove it from the order book.
-        if (matchingLevel.orders[oppositeUserId] <= 0) {
-          delete matchingLevel.orders[oppositeUserId];
-        }
+      // Update stock balances for both users
+      STOCK_BALANCES[existingUserId][stockSymbol][oppositeType].quantity -=
+        quantityToMatch;
+      STOCK_BALANCES[userId][stockSymbol][stockType].quantity +=
+        quantityToMatch;
 
-        if (fulfillableQuantity <= 0) break; // Stop if no more to fulfill.
+      // Update the order book
+      existingOrders.total -= quantityToMatch;
+      existingOrders.orders[existingUserId] -= quantityToMatch;
+
+      if (existingOrders.orders[existingUserId] <= 0) {
+        delete existingOrders.orders[existingUserId];
       }
+
+      remainingQuantity -= quantityToMatch;
     }
 
-    // If this price level is fully fulfilled, remove it from the order book.
-    if (matchingLevel.total <= 0) {
-      delete ORDERBOOK[stockSymbol][oppositeType][matchingPrice];
+    if (existingOrders.total <= 0) {
+      delete ORDERBOOK[stockSymbol][oppositeType][existingPrice];
     }
+
+    if (remainingQuantity <= 0) break;
   }
 
-  return remainingQuantity; // Return any quantity that couldn't be fulfilled.
+  return remainingQuantity;
 }
