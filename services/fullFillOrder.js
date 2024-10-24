@@ -1,3 +1,6 @@
+import { INR_BALANCES, ORDERBOOK, STOCK_BALANCES } from "../models/state.js";
+import { initializeStockBalances } from "../utils/stateHelper.js";
+
 export default function fulfillOrder(
   userId,
   stockSymbol,
@@ -30,21 +33,17 @@ export default function fulfillOrder(
       const quantityToMatch = Math.min(availableQuantity, remainingQuantity);
       const matchCost = quantityToMatch * existingPrice;
 
-      // Update INR_BALANCES
       INR_BALANCES[existingUserId].locked -= matchCost;
       INR_BALANCES[existingUserId].balance += matchCost;
 
-      // Ensure STOCK_BALANCES are properly initialized
       initializeStockBalances(userId, stockSymbol, stockType);
       initializeStockBalances(existingUserId, stockSymbol, oppositeType);
 
-      // Update stock balances for both users
       STOCK_BALANCES[existingUserId][stockSymbol][oppositeType].quantity -=
         quantityToMatch;
       STOCK_BALANCES[userId][stockSymbol][stockType].quantity +=
         quantityToMatch;
 
-      // Update the order book
       existingOrders.total -= quantityToMatch;
       existingOrders.orders[existingUserId] -= quantityToMatch;
 
