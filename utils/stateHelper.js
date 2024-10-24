@@ -1,4 +1,4 @@
-import { STOCK_BALANCES, ORDERBOOK } from "../models/state.js";
+import { STOCK_BALANCES, ORDERBOOK, INR_BALANCES } from "../models/state.js";
 
 export function initializeStockBalances(userId, stockSymbol, stockType) {
   STOCK_BALANCES[userId] = STOCK_BALANCES[userId] || {};
