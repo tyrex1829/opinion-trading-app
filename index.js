@@ -1,6 +1,11 @@
 import express from "express";
 import env from "dotenv";
-import { INR_BALANCES, ORDERBOOK, STOCK_BALANCES } from "./state.js";
+import { INR_BALANCES, ORDERBOOK, STOCK_BALANCES } from "./models/state.js";
+import {
+  initializeStockBalances,
+  initializeOrderBook,
+} from "./utils/stateHelper.js";
+import fulfillOrder from "./services/fullFillOrder.js";
 
 const app = express();
 env.config();
@@ -134,7 +139,7 @@ app.get("/balance/inr/:userId", (req, res) => {
 app.post("/onramp/inr", (req, res) => {
   const { userId, amount } = req.body;
 
-  if (typeof amount !== number) {
+  if (typeof amount !== "number") {
     return res.status(403).json({
       message: `Amount can only be number.`,
     });
@@ -180,71 +185,55 @@ app.post("/order/buy", (req, res) => {
     !price ||
     (stockType !== "yes" && stockType !== "no")
   ) {
-    return res.status(404).json({
+    return res.status(400).json({
       message: `Missing required field`,
     });
   }
 
   if (!INR_BALANCES[userId]) {
     return res.status(404).json({
-      message: `${userId} is not available, pls create the particular user first.`,
+      message: `${userId} is not available, please create the user first.`,
     });
   }
 
   const totalPrice = price * quantity;
 
   if (INR_BALANCES[userId].balance < totalPrice) {
-    return res.status(404).json({
+    return res.status(403).json({
       message: `You don't have sufficient balance to place this order, kindly add the required amount first.`,
     });
   }
 
-  if (!ORDERBOOK[stockSymbol]) {
-    ORDERBOOK[stockSymbol] = {
-      yes: {},
-      no: {},
-    };
+  initializeOrderBook(stockSymbol, stockType);
+
+  let remainingQuantity = fulfillOrder(
+    userId,
+    stockSymbol,
+    quantity,
+    price,
+    stockType,
+    true
+  );
+
+  const fulfilledQuantity = quantity - remainingQuantity;
+  INR_BALANCES[userId].balance -= fulfilledQuantity * price;
+  INR_BALANCES[userId].locked += fulfilledQuantity * price;
+
+  if (remainingQuantity > 0) {
+    initializeOrderBook(stockSymbol, stockType, price);
+    const levelOfPrice = ORDERBOOK[stockSymbol][stockType][price];
+
+    if (levelOfPrice.orders[userId]) {
+      levelOfPrice.orders[userId] += remainingQuantity;
+    } else {
+      levelOfPrice.orders[userId] = remainingQuantity;
+    }
+
+    levelOfPrice.total += remainingQuantity;
+
+    INR_BALANCES[userId].balance -= remainingQuantity * price;
+    INR_BALANCES[userId].locked += remainingQuantity * price;
   }
-
-  if (!ORDERBOOK[stockSymbol][stockType][price]) {
-    ORDERBOOK[stockSymbol][stockType][price] = {
-      total: 0,
-      orders: {},
-    };
-  }
-
-  const levelOfPrice = ORDERBOOK[stockSymbol][stockType][price];
-
-  if (levelOfPrice.orders[userId]) {
-    levelOfPrice.orders[userId] += quantity;
-  } else {
-    levelOfPrice.orders[userId] = quantity;
-  }
-
-  levelOfPrice.total += quantity;
-
-  INR_BALANCES[userId].balance -= totalPrice;
-  INR_BALANCES[userId].locked += totalPrice;
-
-  if (!STOCK_BALANCES[userId]) {
-    STOCK_BALANCES[userId] = {};
-  }
-
-  if (!STOCK_BALANCES[userId][stockSymbol]) {
-    STOCK_BALANCES[userId][stockSymbol] = {
-      yes: { quantity: 0, locked: 0 },
-      no: { quantity: 0, locked: 0 },
-    };
-  }
-
-  if (!STOCK_BALANCES[userId][stockSymbol][stockType]) {
-    STOCK_BALANCES[userId][stockSymbol][stockType] = {
-      quantity: 0,
-      locked: 0,
-    };
-  }
-
-  STOCK_BALANCES[userId][stockSymbol][stockType].quantity += quantity;
 
   return res.status(200).json({
     message: `Successfully placed buy order for ${quantity} of ${stockType} at price ${price} for ${stockSymbol}`,
@@ -297,29 +286,43 @@ app.post("/order/sell", (req, res) => {
   STOCK_BALANCES[userId][stockSymbol][stockType].quantity -= quantity;
   STOCK_BALANCES[userId][stockSymbol][stockType].locked += quantity;
 
-  if (!ORDERBOOK[stockSymbol]) {
-    ORDERBOOK[stockSymbol] = {
-      yes: {},
-      no: {},
-    };
+  initializeOrderBook(stockSymbol, stockType);
+
+  // if (!ORDERBOOK[stockSymbol]) {
+  //   ORDERBOOK[stockSymbol] = {
+  //     yes: {},
+  //     no: {},
+  //   };
+  // }
+
+  // if (!ORDERBOOK[stockSymbol][stockType]) {
+  //   ORDERBOOK[stockSymbol][stockType] = {};
+  // }
+
+  let remainingQuantity = fulfillOrder(
+    userId,
+    stockSymbol,
+    quantity,
+    price,
+    stockType,
+    false
+  );
+
+  const fulfilledQuantity = quantity - remainingQuantity;
+  STOCK_BALANCES[userId][stockSymbol][stockType].locked -= fulfilledQuantity;
+
+  if (remainingQuantity > 0) {
+    initializeOrderBook(stockSymbol, stockType, price);
+    const levelOfPrice = ORDERBOOK[stockSymbol][stockType][price];
+
+    if (levelOfPrice.orders[userId]) {
+      levelOfPrice.orders[userId] += remainingQuantity;
+    } else {
+      levelOfPrice.orders[userId] = remainingQuantity;
+    }
+
+    levelOfPrice.total += remainingQuantity;
   }
-
-  if (!ORDERBOOK[stockSymbol][stockType][price]) {
-    ORDERBOOK[stockSymbol][stockType][price] = {
-      total: 0,
-      orders: {},
-    };
-  }
-
-  const levelOfPrice = ORDERBOOK[stockSymbol][stockType][price];
-
-  if (levelOfPrice.orders[userId]) {
-    levelOfPrice.orders[userId] += quantity;
-  } else {
-    levelOfPrice.orders[userId] = quantity;
-  }
-
-  levelOfPrice.total += quantity;
 
   return res.status(200).json({
     message: `Successfully placed sell order for ${quantity} of ${stockType} at price ${price} for ${stockSymbol}`,
@@ -374,6 +377,13 @@ app.post("/trade/mint", (req, res) => {
         quantity: 0,
         locked: 0,
       },
+    };
+  }
+
+  if (!STOCK_BALANCES[userId][stockSymbol][stockType]) {
+    STOCK_BALANCES[userId][stockSymbol][stockType] = {
+      quantity: 0,
+      locked: 0,
     };
   }
 
