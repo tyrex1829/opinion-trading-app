@@ -1,10 +1,21 @@
 import { WebSocket, WebSocketServer } from "ws";
-import client from "../queue/redisClient";
+import {
+  client,
+  clientStart,
+  popFromDoneTaskQueue,
+} from "../queue/redisQueue.js";
+import { v4 as uuidv4 } from "uuidv4";
+
+const mpp = new Map();
 
 const wss = new WebSocketServer({ port: 8080 });
 
 wss.on("connection", (ws) => {
-  console.log(`User connected`);
+  const clientId = uuidv4();
+  mpp.set(clientId, ws);
+  ws.clientId = clientId;
+
+  console.log(`User connected: ${clientId}`);
 
   ws.on("error", (error) => {
     console.error(`Error in ws-server: ${error}`);
@@ -16,25 +27,30 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     console.log("User disconnected");
+    mpp.delete(clientId);
   });
 });
 
 function sendToEachUser(message) {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
+      console.log(`Sending message to client: ${JSON.stringify(message)}`);
       client.send(`msg: ${message}`);
     }
   });
 }
 
+await clientStart().catch((error) => {
+  console.error(`Failed to connect to redis in websocket-server: ${error}`);
+  process.exit(1);
+});
+console.log(`Redis server running in websocket-server...`);
+
 async function getCompletedTasks() {
-  while (true) {
-    const taskData = await client.brPop("completed tasks queues", 0);
-    if (taskData) {
-      const completedTask = JSON.parse(taskData.element);
-      sendToEachUser(taskData);
-    }
-  }
+  await popFromDoneTaskQueue((doneTask) => {
+    console.log(`Sending done tasks to clients: ${JSON.stringify(doneTask)}`);
+    sendToEachUser(doneTask);
+  });
 }
 
 getCompletedTasks();
