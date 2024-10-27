@@ -122,6 +122,7 @@ app.get("/orderbook", async (req, res) => {
   const uuid = uuidv4();
   const task = {
     type: "viewOrderbook",
+    payload: {},
     uuid: uuid,
   };
   try {
@@ -146,6 +147,7 @@ app.get("/balances/inr", async (req, res) => {
 
   const task = {
     type: "getBalance",
+    payload: {},
     uuid,
   };
 
@@ -171,6 +173,7 @@ app.get("/balances/stock", async (req, res) => {
 
   const task = {
     type: "getStockBalance",
+    payload: {},
     uuid,
   };
 
@@ -196,6 +199,7 @@ app.post("/reset", async (req, res) => {
 
   const task = {
     type: "resetVariables",
+    payload: {},
     uuid,
   };
 
