@@ -6,6 +6,8 @@ import {
   initializeOrderBook,
 } from "./utils/stateHelper.js";
 import fulfillOrder from "./services/fullFillOrder.js";
+import { clientStart, pushToTaskQueue } from "./queue/redisClient.js";
+import { uuid, v4 as uuidv4 } from "uuidv4";
 
 const app = express();
 env.config();
@@ -16,6 +18,14 @@ console.log(INR_BALANCES, ORDERBOOK, STOCK_BALANCES);
 
 app.use(express.json());
 
+try {
+  await clientStart();
+  console.log("Redis server is running in api...");
+} catch (error) {
+  console.error("Failed to connected with redis client");
+  process.exit(1);
+}
+
 app.get("/", (req, res) => {
   console.log("Landing page");
   res.json({
@@ -24,8 +34,28 @@ app.get("/", (req, res) => {
 });
 
 // End-Points
-app.post("/user/create/:userId", (req, res) => {
+app.post("/user/create/:userId", async (req, res) => {
   const userId = req.params.userId;
+
+  const uuid = uuidv4();
+  const task = {
+    type: "createUser",
+    payload: userId,
+    uuid: uuid,
+  };
+
+  try {
+    // pubsub -> promise
+    await pushToTaskQueue(task);
+    // pubsub -> subscribe
+    return res.status(201).json({
+      //got data from pubsub
+    });
+  } catch (error) {
+    return res.status(403).json({
+      error,
+    });
+  }
 
   if (INR_BALANCES[userId]) {
     if (!STOCK_BALANCES[userId]) {
@@ -88,25 +118,99 @@ app.post("/symbol/create/:stockSymbol", (req, res) => {
   });
 });
 
-app.get("/orderbook", (req, res) => {
+app.get("/orderbook", async (req, res) => {
+  const uuid = uuidv4();
+  const task = {
+    type: "viewOrderbook",
+    uuid: uuid,
+  };
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // subscribe -> pub-sub
+    res.status(200).json({
+      // got data from pub sub
+    });
+  } catch (error) {
+    res.status(404).json({
+      error,
+    });
+  }
   return res.status(200).json({
     ORDERBOOK,
   });
 });
 
-app.get("/balances/inr", (req, res) => {
+app.get("/balances/inr", async (req, res) => {
+  const uuid = uuidv4();
+
+  const task = {
+    type: "getBalance",
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // data from pub-sub
+    });
+  } catch (error) {
+    return res.status(404).json({
+      error,
+    });
+  }
   return res.status(200).json({
     INR_BALANCES,
   });
 });
 
-app.get("/balances/stock", (req, res) => {
+app.get("/balances/stock", async (req, res) => {
+  const uuid = uuidv4();
+
+  const task = {
+    type: "getStockBalance",
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // data from pub-sub
+    });
+  } catch (error) {
+    return res.status(400).json({
+      error,
+    });
+  }
   return res.status(200).json({
     STOCK_BALANCES,
   });
 });
 
-app.post("/reset", (req, res) => {
+app.post("/reset", async (req, res) => {
+  const uuid = uuidv4();
+
+  const task = {
+    type: "resetVariables",
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // data from pub-sub
+    });
+  } catch (error) {
+    return res.status(400).json({
+      error,
+    });
+  }
   Object.keys(INR_BALANCES).forEach((key) => delete INR_BALANCES[key]);
   Object.keys(ORDERBOOK).forEach((key) => delete ORDERBOOK[key]);
   Object.keys(STOCK_BALANCES).forEach((key) => delete STOCK_BALANCES[key]);
@@ -120,8 +224,28 @@ app.post("/reset", (req, res) => {
 });
 
 // Functionality
-app.get("/balance/inr/:userId", (req, res) => {
+app.get("/balance/inr/:userId", async (req, res) => {
   const userId = req.params.userId;
+  const uuid = uuidv4();
+
+  const task = {
+    type: "getBalanceOfParticularUser",
+    payload: userId,
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // pub-sub -> data
+    });
+  } catch (error) {
+    return res.status(404).json({
+      error,
+    });
+  }
 
   if (!INR_BALANCES[userId]) {
     return res.status(404).json({
@@ -136,8 +260,31 @@ app.get("/balance/inr/:userId", (req, res) => {
   });
 });
 
-app.post("/onramp/inr", (req, res) => {
+app.post("/onramp/inr", async (req, res) => {
   const { userId, amount } = req.body;
+  const uuid = uuidv4();
+
+  const task = {
+    type: "addMoneyToParticularUser",
+    payload: {
+      userId,
+      amount,
+    },
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // pub-sub -> data
+    });
+  } catch (error) {
+    return res.status(404).json({
+      error,
+    });
+  }
 
   if (typeof amount !== "number") {
     return res.status(403).json({
@@ -158,8 +305,28 @@ app.post("/onramp/inr", (req, res) => {
   });
 });
 
-app.get("/balance/stock/:userId", (req, res) => {
+app.get("/balance/stock/:userId", async (req, res) => {
   const userId = req.params.userId;
+  const uuid = uuidv4();
+
+  const task = {
+    type: "getStockBalanceOfParticularUser",
+    payload: userId,
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // pub-sub -> data
+    });
+  } catch (error) {
+    return res.status(404).json({
+      error,
+    });
+  }
 
   if (!STOCK_BALANCES[userId]) {
     return res.status(404).json({
@@ -174,8 +341,34 @@ app.get("/balance/stock/:userId", (req, res) => {
   });
 });
 
-app.post("/order/buy", (req, res) => {
+app.post("/order/buy", async (req, res) => {
   const { userId, stockSymbol, quantity, price, stockType } = req.body;
+  const uuid = uuidv4();
+
+  const task = {
+    type: "orderBuy",
+    payload: {
+      userId,
+      stockSymbol,
+      quantity,
+      price,
+      stockType,
+    },
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // pub-sub -> data
+    });
+  } catch (error) {
+    return res.status(400).json({
+      error,
+    });
+  }
 
   if (
     !userId ||
@@ -243,8 +436,35 @@ app.post("/order/buy", (req, res) => {
   });
 });
 
-app.post("/order/sell", (req, res) => {
+app.post("/order/sell", async (req, res) => {
   const { userId, stockSymbol, quantity, price, stockType } = req.body;
+
+  const uuid = uuidv4();
+
+  const task = {
+    type: "orderSell",
+    payload: {
+      userId,
+      stockSymbol,
+      quantity,
+      price,
+      stockType,
+    },
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue(task);
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // pub-sub -> data
+    });
+  } catch (error) {
+    return res.status(404).json({
+      error,
+    });
+  }
 
   if (
     !userId ||
@@ -332,8 +552,28 @@ app.post("/order/sell", (req, res) => {
   });
 });
 
-app.get("/orderbook/:stockSymbol", (req, res) => {
+app.get("/orderbook/:stockSymbol", async (req, res) => {
   const stockSymbol = req.params.stockSymbol;
+  const uuid = uuidv4();
+
+  const task = {
+    type: "getOrderbookOfParticularSymbol",
+    payload: stockSymbol,
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue;
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // pub-sub -> data
+    });
+  } catch (error) {
+    return res.status(404).json({
+      error,
+    });
+  }
 
   if (!ORDERBOOK[stockSymbol]) {
     return res.status(404).json({
@@ -346,8 +586,33 @@ app.get("/orderbook/:stockSymbol", (req, res) => {
   });
 });
 
-app.post("/trade/mint", (req, res) => {
+app.post("/trade/mint", async (req, res) => {
   const { userId, stockSymbol, quantity, stockType } = req.body;
+  const uuid = uuidv4();
+
+  const task = {
+    type: "mintTokens",
+    payload: {
+      userId,
+      stockSymbol,
+      quantity,
+      stockType,
+    },
+    uuid,
+  };
+
+  try {
+    // pub-sub -> promise
+    await pushToTaskQueue;
+    // pub-sub -> subscribe
+    return res.status(200).json({
+      // pub-sub -> data
+    });
+  } catch (error) {
+    return res.status(404).json({
+      error,
+    });
+  }
 
   if (
     !userId ||
