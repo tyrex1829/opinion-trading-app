@@ -1,13 +1,7 @@
 import express from "express";
 import env from "dotenv";
-import { INR_BALANCES, ORDERBOOK, STOCK_BALANCES } from "./models/state.js";
-import {
-  initializeStockBalances,
-  initializeOrderBook,
-} from "./utils/stateHelper.js";
-import fulfillOrder from "./services/fullFillOrder.js";
-import { clientStart, pushToTaskQueue } from "./queue/redisClient.js";
-import { uuid, v4 as uuidv4 } from "uuidv4";
+
+import { v4 as uuidv4 } from "uuidv4";
 
 const app = express();
 env.config();
@@ -15,13 +9,43 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-try {
-  await clientStart();
-  console.log("Redis server is running in api...");
-} catch (error) {
-  console.error("Failed to connected with redis client");
-  process.exit(1);
-}
+const handlePubSubWithTimeout = (uuid, timeoutMs) => {
+  return new Promise((resolve, reject) => {
+    const channel = `response.${uuid}`;
+
+    const timeout = setTimeout(() => {
+      subscriber.unsubscribe(channel);
+      reject(new Error("Response timed out"));
+    }, timeoutMs);
+
+    subscriber.subscribe(channel, (data) => {
+      clearTimeout(timeout);
+      subscriber.unsubscribe(channel);
+      resolve(data);
+    });
+  });
+};
+
+const sendResponse = (res, payload) => {
+  try {
+    const { error, ...data } = JSON.parse(payload);
+    if (error) {
+      res.status(404).json(data);
+    } else {
+      res.status(200).json(data);
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Invalid response from server" });
+  }
+};
+
+// try {
+//   await clientStart();
+//   console.log("Redis server is running in api...");
+// } catch (error) {
+//   console.error("Failed to connected with redis client");
+//   process.exit(1);
+// }
 
 app.get("/", (req, res) => {
   console.log("Landing page");
@@ -44,13 +68,11 @@ app.post("/user/create/:userId", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(201).json({
-      //
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -71,13 +93,11 @@ app.post("/symbol/create/:stockSymbol", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(201).json({
-      //
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -132,13 +152,11 @@ app.get("/orderbook", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    res.status(200).json({
-      // got data from pub sub
-    });
+    sendResponse(res, response);
   } catch (error) {
     res.status(500).json({
       error,
@@ -158,13 +176,11 @@ app.get("/balances/inr", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // data from pub-sub
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -184,13 +200,11 @@ app.get("/balances/stock", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // data from pub-sub
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -210,13 +224,11 @@ app.post("/reset", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // data from pub-sub
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -238,13 +250,11 @@ app.get("/balance/inr/:userId", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // pub-sub -> data
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -268,13 +278,11 @@ app.post("/onramp/inr", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // pub-sub -> data
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -295,13 +303,11 @@ app.get("/balance/stock/:userId", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // pub-sub -> data
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -328,13 +334,11 @@ app.post("/order/buy", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // pub-sub -> data
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -362,13 +366,11 @@ app.post("/order/sell", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue(task);
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // pub-sub -> data
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -389,13 +391,11 @@ app.get("/orderbook/:stockSymbol", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue;
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // pub-sub -> data
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
@@ -421,13 +421,11 @@ app.post("/trade/mint", async (req, res) => {
   try {
     const pubSubPromise = handlePubSubWithTimeout(uuid, 5000);
 
-    await pushToTaskQueue;
+    await redisClient.rPush(taskQueue, JSON.stringify(task));
 
     const response = await pubSubPromise;
 
-    return res.status(200).json({
-      // pub-sub -> data
-    });
+    sendResponse(res, response);
   } catch (error) {
     return res.status(500).json({
       error,
