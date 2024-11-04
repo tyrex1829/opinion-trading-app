@@ -18,8 +18,8 @@ async function startServer() {
     await subscriber.connect();
     console.log("Connected to Redis");
 
-    app.listen(3005, () => {
-      console.log("Server is running on port 3005");
+    app.listen(3001, () => {
+      console.log("Server is running on port 3001");
     });
   } catch (error) {
     console.error("Failed to connect to Redis", error);
