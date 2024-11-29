@@ -35,7 +35,7 @@ function sendToEachUser(message) {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       console.log(`Sending message to client: ${JSON.stringify(message)}`);
-      client.send(`msg: ${message}`);
+      client.send(`msg: ${JSON.stringify(message)}`);
     }
   });
 }
@@ -47,9 +47,10 @@ await clientStart().catch((error) => {
 console.log(`Redis server running in websocket-server...`);
 
 async function getCompletedTasks() {
-  await popFromDoneTaskQueue((doneTask) => {
-    console.log(`Sending done tasks to clients: ${JSON.stringify(doneTask)}`);
-    sendToEachUser(doneTask);
+  pubsub.subscribe("sentToWebSocket-server", (message) => {
+    const data = message;
+    console.log(data);
+    sendToEachUser(data);
   });
 }
 
